@@ -1295,6 +1295,29 @@ def test_discovery_duplicate_links(tmp_path, option):
     assert sorted(pipeline.call_args.args[1].dump_urls()) == links
 
 
+@pytest.mark.parametrize(
+    "seeds, expected_sleeps",
+    [
+        ("https://example.org/en/\nhttps://example.org/de/\n", 1),
+        ("https://a.org/\nhttps://b.org/\n", 0),
+    ],
+    ids=["same-website", "different-websites"],
+)
+def test_discovery_same_website_seeds_serial_with_sleep(tmp_path, seeds, expected_sleeps):
+    "Seeds of the same website are discovered one after another, with a sleep in between."
+    (tmp_path / "seeds").write_text(seeds, encoding="utf-8")
+    sleeps = []
+    with (
+        patch.object(cli_utils, "sitemap_search", lambda url, **kwargs: [url + "page"]),
+        patch.object(cli_utils, "sleep", side_effect=sleeps.append),
+        patch.object(cli_utils, "url_processing_pipeline", return_value=0),
+    ):
+        assert cli_utils.cli_discovery(cli.parse_args(["--sitemap", "-i", str(tmp_path / "seeds")])) == 0
+    # conftest zeroes SLEEP_TIME, so only the number of sleeps is asserted here;
+    # the real 5 s wait between same-website seeds is covered by the issue reproducer
+    assert len(sleeps) == expected_sleeps
+
+
 @pytest.mark.parametrize("list_mode", [False, True], ids=["extract", "list"])
 def test_explore_crawls_seeds_without_links(tmp_path, list_mode):
     "Only seeds without links left after the blacklist are crawled, also after --list flushed the store."
