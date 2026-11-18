@@ -578,13 +578,32 @@ def as_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else [value]
 
 
+def _first_srcset_url(srcset: str) -> str | None:
+    "First image URL in a srcset value: split on whitespace, not commas, as URLs may contain commas."
+    for token in srcset.split():
+        url = token.rstrip(",")
+        if is_image_file(url):
+            return url
+    return None
+
+
 def image_src(element: _Element) -> str | None:
-    "Image source of an element: src, data-src, or the first data-src* attribute pointing to an image file."
-    for attr in ("data-src", "src"):
-        src = element.get(attr, "")
+    "Image source of an element: lazy-loading attributes, src, the first URL of a srcset, or a data-src* attribute."
+    for attr in ("data-src", "data-lazy-src", "data-original", "src"):
+        src = element.get(attr, "").strip()
         if is_image_file(src):
             return src
-    return next((v for a, v in element.attrib.items() if a.startswith("data-src") and is_image_file(v)), None)
+    for attr in ("data-srcset", "srcset"):
+        if (srcset_url := _first_srcset_url(element.get(attr, ""))) is not None:
+            return srcset_url
+    return next(
+        (
+            value.strip()
+            for attr, value in element.attrib.items()
+            if attr.startswith("data-src") and not attr.endswith("srcset") and is_image_file(value.strip())
+        ),
+        None,
+    )
 
 
 def is_image_file(imagesrc: str | None) -> bool:

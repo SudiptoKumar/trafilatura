@@ -3300,6 +3300,29 @@ def test_include_images_does_not_truncate():
     assert all(f"Continuation paragraph {i}" in result for i in range(1, 5))
 
 
+@pytest.mark.parametrize(
+    "img,expected",
+    [
+        ('<img src="/blank.gif" data-lazy-src="/pic.jpg">', "https://example.org/pic.jpg"),
+        ('<img src="/blank.gif" data-original="/pic.jpg">', "https://example.org/pic.jpg"),
+        ('<img data-srcset="/pic.jpg 800w, /pic-2x.jpg 1600w">', "https://example.org/pic.jpg"),
+        ('<img srcset="/pic.jpg 800w, /pic-2x.jpg 1600w">', "https://example.org/pic.jpg"),
+        # a real src still wins over a srcset, and data-src over a placeholder src
+        ('<img src="/real.jpg" srcset="/pic.jpg 800w, /pic-2x.jpg 1600w">', "https://example.org/real.jpg"),
+        ('<img src="/blank.gif" data-src="/pic.jpg">', "https://example.org/pic.jpg"),
+        # URLs containing commas must not be split on the comma
+        ('<img srcset="/w_115,h_115/pic.jpg 800w, /pic-2x.jpg 1600w">', "https://example.org/w_115,h_115/pic.jpg"),
+    ],
+    ids=["data-lazy-src", "data-original", "data-srcset", "srcset", "src-beats-srcset", "data-src", "comma-in-url"],
+)
+def test_lazy_loaded_images(img, expected):
+    "regression #1167: lazy-loading attributes and srcsets must yield the real image URL."
+    p = "<p>" + "word " * 50 + "</p>"
+    html = f"<html><body><article>{p}<p>{img}</p>{p}</article></body></html>"
+    result = extract(html, include_images=True, output_format="markdown", url="https://example.org/") or ""
+    assert f"![]({expected})" in result
+
+
 def test_short_document_fallback_preserves_image():
     """A text-only fallback must not erase a requested image when it recovers no text."""
     first = (
